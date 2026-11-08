@@ -1,0 +1,95 @@
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,3 +112,4 @@
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
++bsd/dev/sweet_gpu.c			standard
+ bsd/dev/mem.c				standard
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -55,3 +55,4 @@
+ extern void sweet_usb_probe(void);
++extern void sweet_gpu_probe(void);
+ 
+ #define REG_CAP         0x00
+@@ -661,4 +662,5 @@
+ 	sweet_touch_init();
+ 	sweet_usb_probe();
++	sweet_gpu_probe();
+ 	return 0;
+ }
+--- /dev/null
++++ b/bsd/dev/sweet_gpu.c
+@@ -0,0 +1,72 @@
++/* SWEET GPU: A618 clock/GDSC probe. sweetgpu=1 read-only, =2 also enables GCC GPU AHB clk */
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <pexpert/pexpert.h>
++#include <mach/vm_types.h>
++#include <stdint.h>
++#include <stdbool.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++void sweet_gpu_probe(void);
++
++#define GCC_PA     0x100000
++#define GCC_SIZE   0x1f0000
++#define GPUCC_PA   0x5090000
++#define GPUCC_SIZE 0x9000
++#define CBCR_OFF   (1u << 31)
++#define AHB        0x71004
++
++static inline uint32_t
++gpu_rd(vm_offset_t b, uint32_t o)
++{
++	return *(volatile uint32_t *)(b + o);
++}
++
++static const struct { const char *n; uint32_t off; } gcc_clk[] = {
++	{ "gpu_cfg_ahb", 0x71004 }, { "gpu_memnoc", 0x7100c }, { "gpu_snoc_dvm", 0x71018 },
++};
++static const struct { const char *n; uint32_t off; } cc_reg[] = {
++	{ "gx_gdscr", 0x100c }, { "cx_gdscr", 0x106c }, { "r1008", 0x1008 },
++	{ "r1508", 0x1508 }, { "r1540", 0x1540 }, { "cx_gmu_cbcr", 0x1098 },
++};
++
++void
++sweet_gpu_probe(void)
++{
++	int mode = 0;
++	PE_parse_boot_argn("sweetgpu", &mode, sizeof(mode));
++	if (!mode) {
++		return;
++	}
++	vm_offset_t gcc = ml_io_map(GCC_PA, GCC_SIZE);
++	if (gcc == 0) {
++		printf("SWEET GPU: GCC map failed\n");
++		return;
++	}
++	for (unsigned i = 0; i < sizeof(gcc_clk) / sizeof(gcc_clk[0]); i++) {
++		uint32_t v = gpu_rd(gcc, gcc_clk[i].off);
++		printf("SWEET GPU: GCC %-12s [0x%05x] 0x%08x (%s)\n", gcc_clk[i].n, gcc_clk[i].off, v,
++		    (v & CBCR_OFF) ? "off" : "on");
++	}
++	uint32_t ahb = gpu_rd(gcc, AHB);
++	if ((ahb & CBCR_OFF) && mode >= 2) {
++		*(volatile uint32_t *)(gcc + AHB) = ahb | 1u;
++		for (int n = 0; n < 100000 && (gpu_rd(gcc, AHB) & CBCR_OFF); n++) {
++		}
++		ahb = gpu_rd(gcc, AHB);
++		printf("SWEET GPU: AHB after enable 0x%08x (%s)\n", ahb, (ahb & CBCR_OFF) ? "STILL OFF" : "on");
++	}
++	if (ahb & CBCR_OFF) {
++		printf("SWEET GPU: AHB clk off; GPUCC not read (use sweetgpu=2)\n");
++		return;
++	}
++	vm_offset_t cc = ml_io_map(GPUCC_PA, GPUCC_SIZE);
++	if (cc == 0) {
++		printf("SWEET GPU: GPUCC map failed\n");
++		return;
++	}
++	for (unsigned i = 0; i < sizeof(cc_reg) / sizeof(cc_reg[0]); i++) {
++		printf("SWEET GPU: CC  %-12s [0x%04x] 0x%08x\n", cc_reg[i].n, cc_reg[i].off, gpu_rd(cc, cc_reg[i].off));
++	}
++	printf("SWEET GPU: probe done\n");
++}
