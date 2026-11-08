@@ -1,0 +1,38 @@
+--- a/bsd/dev/sweet_gpu.c
++++ b/bsd/dev/sweet_gpu.c
+@@ -95,6 +95,35 @@
+ 					for (unsigned i = 0; i < 8; i++) {
+ 						printf("SWEET GPU: GMU [0x%05x] 0x%08x\n", 0x14000 + i * 4, gpu_rd(gmu, 0x14000 + i * 4));
+ 					}
++					if (mode >= 4) {
++						static const struct { const char *n; uint32_t off; } r4[] = {
++							{ "ICACHE_CONFIG", 0x13000 }, { "DCACHE_CONFIG", 0x13004 },
++							{ "ITCM_first", 0x3000 }, { "ITCM_last", 0x6ffc },
++							{ "DTCM_first", 0x7000 }, { "DTCM_fwver", 0xafe0 }, { "DTCM_last", 0xaffc },
++							{ "CM3_BOOT_CONFIG", 0x14004 }, { "CM3_FW_INIT_RESULT", 0x14070 }, { "CM3_CFG", 0x140b4 },
++							{ "PWR_COL_FRAME_CTRL", 0x14300 }, { "PWR_COL_KEEPALIVE", 0x1430c },
++							{ "SPTPRAC_PWR_CLK", 0x14340 }, { "RPMH_CTRL", 0x143a0 }, { "RPMH_PWR_STATE", 0x143b0 },
++							{ "HFI_CTRL_STATUS", 0x14600 }, { "HFI_QTBL_INFO", 0x14610 }, { "HFI_QTBL_ADDR", 0x14614 },
++							{ "GMU2HOST_INFO", 0x14648 }, { "GMU2HOST_MASK", 0x1464c }, { "HOST2GMU_RAW", 0x14658 },
++							{ "GENERAL_7", 0x14730 }, { "SYS_BUS_CONFIG", 0x1303c }, { "MX_VOTE_IDX", 0x8fe8 },
++						};
++						for (unsigned i = 0; i < sizeof(r4) / sizeof(r4[0]); i++) {
++							printf("SWEET GPU: GMU %-18s [0x%05x] 0x%08x\n", r4[i].n, r4[i].off, gpu_rd(gmu, r4[i].off));
++						}
++					}
++					if (mode >= 5) {
++						static const struct { const char *n; uint32_t off; } r5[] = {
++							{ "RSC_STATUS0", 0x23010 }, { "RSC_PDC_SEQ_START", 0x23020 },
++							{ "RSC_SEQ_BUSY", 0x23404 }, { "RSC_SEQ_MEM_0", 0x23600 },
++							{ "AO_INTR_EN", 0x24c0c }, { "AO_HOST_INTR_STATUS", 0x24c14 },
++							{ "RSCC_CONTROL_REQ", 0x24c1c }, { "RSCC_CONTROL_ACK", 0x24c20 },
++							{ "AO_CGC_MODE", 0x24c24 }, { "AO_CX_BUSY_STATUS", 0x24c30 },
++							{ "AHB_FENCE_CTRL", 0x24c40 }, { "AHB_FENCE_STATUS", 0x24c4c },
++						};
++						for (unsigned i = 0; i < sizeof(r5) / sizeof(r5[0]); i++) {
++							printf("SWEET GPU: GMU %-18s [0x%05x] 0x%08x\n", r5[i].n, r5[i].off, gpu_rd(gmu, r5[i].off));
++						}
++					}
+ 				}
+ 			}
+ 		}
