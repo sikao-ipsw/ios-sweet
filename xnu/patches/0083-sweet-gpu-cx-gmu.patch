@@ -1,0 +1,46 @@
+--- a/bsd/dev/sweet_gpu.c
++++ b/bsd/dev/sweet_gpu.c
+@@ -15,6 +15,10 @@
+ #define GPUCC_SIZE 0x9000
+ #define CBCR_OFF   (1u << 31)
+ #define AHB        0x71004
++#define CX_GDSCR   0x106c
++#define GMU_CBCR   0x1098
++#define GMU_PA     0x506a000
++#define GMU_SIZE   0x31000
+ 
+ static inline uint32_t
+ gpu_rd(vm_offset_t b, uint32_t o)
+@@ -68,5 +72,32 @@
+ 	for (unsigned i = 0; i < sizeof(cc_reg) / sizeof(cc_reg[0]); i++) {
+ 		printf("SWEET GPU: CC  %-12s [0x%04x] 0x%08x\n", cc_reg[i].n, cc_reg[i].off, gpu_rd(cc, cc_reg[i].off));
+ 	}
++	if (mode >= 3) {
++		uint32_t g = gpu_rd(cc, CX_GDSCR);
++		*(volatile uint32_t *)(cc + CX_GDSCR) = g & ~1u;
++		for (int n = 0; n < 100000 && !(gpu_rd(cc, CX_GDSCR) & (1u << 31)); n++) {
++		}
++		g = gpu_rd(cc, CX_GDSCR);
++		printf("SWEET GPU: CX GDSC after power-up 0x%08x (%s)\n", g, (g & (1u << 31)) ? "on" : "STILL OFF");
++		if (g & (1u << 31)) {
++			uint32_t c = gpu_rd(cc, GMU_CBCR);
++			*(volatile uint32_t *)(cc + GMU_CBCR) = c | 1u;
++			for (int n = 0; n < 100000 && (gpu_rd(cc, GMU_CBCR) & CBCR_OFF); n++) {
++			}
++			c = gpu_rd(cc, GMU_CBCR);
++			printf("SWEET GPU: GMU clk CBCR 0x%08x (%s)\n", c, (c & CBCR_OFF) ? "STILL OFF" : "on");
++			if (!(c & CBCR_OFF)) {
++				vm_offset_t gmu = ml_io_map(GMU_PA, GMU_SIZE);
++				if (gmu) {
++					for (unsigned i = 0; i < 4; i++) {
++						printf("SWEET GPU: GMU [0x%05x] 0x%08x\n", i * 4, gpu_rd(gmu, i * 4));
++					}
++					for (unsigned i = 0; i < 8; i++) {
++						printf("SWEET GPU: GMU [0x%05x] 0x%08x\n", 0x14000 + i * 4, gpu_rd(gmu, 0x14000 + i * 4));
++					}
++				}
++			}
++		}
++	}
+ 	printf("SWEET GPU: probe done\n");
+ }
